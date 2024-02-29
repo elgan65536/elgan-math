@@ -4,12 +4,13 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-use crate::arithmetic;
+use crate::arithmetic::IntArithmetic;
 
+/// A fraction of the form a/b for integers a and b.
 #[derive(Clone, Copy, Debug)]
 pub struct Fraction {
-    pub num: i64,
-    pub den: i64,
+    num: i64,
+    den: i64,
 }
 
 impl From<Fraction> for f32 {
@@ -58,20 +59,27 @@ impl Add for Fraction {
 
     /// performs the `+` operation. In the case of overflow, finds a fraction close to the correct answer that does not overflow.
     fn add(self, rhs: Self) -> Self::Output {
-        let mut num = self.num as i128 * rhs.den as i128 + self.den as i128 * rhs.num as i128;
-        let mut den = self.den as i128 * rhs.den as i128;
-        let common_fac = arithmetic::gcd(num.abs(), den.abs());
-        num /= common_fac;
-        den /= common_fac;
-        while num > i64::MAX as i128
-            || den > i64::MAX as i128
-            || num < i64::MIN as i128
-            || den < i64::MIN as i128
-        {
-            num /= 2;
-            den /= 2;
+        let gcd = self.den.gcd(rhs.den) as i128;
+        let num =
+            rhs.den as i128 / gcd * self.num as i128 + self.den as i128 / gcd * rhs.num as i128;
+        let den = (self.den as i128).lcm(rhs.den as i128);
+        let max = num.abs().max(den.abs());
+        let min = num.abs().min(den.abs());
+        let mut fact = (max / i64::MAX as i128) + 1;
+        if fact > 1 && min % fact != 0 && min % (fact + 1) == 0 {
+            fact += 1;
         }
-        Self::new(num as i64, den as i64)
+        let new_num = num / fact;
+        let new_den = den / fact;
+        if new_den == 0 {
+            if new_num > 0 {
+                Fraction::MAX
+            } else {
+                Fraction::MIN
+            }
+        } else {
+            Self::new(new_num as i64, new_den as i64)
+        }
     }
 }
 
@@ -88,21 +96,35 @@ impl Mul for Fraction {
     type Output = Self;
 
     /// performs the `*` operation. In the case of overflow, finds a fraction close to the correct answer that does not overflow.
-    fn mul(self, rhs: Self) -> Self::Output {
-        let mut num = self.num as i128 * rhs.num as i128;
-        let mut den = self.den as i128 * rhs.den as i128;
-        let common_fac = arithmetic::gcd(num.abs(), den.abs());
-        num /= common_fac;
-        den /= common_fac;
-        while num > i64::MAX as i128
-            || den > i64::MAX as i128
-            || num < i64::MIN as i128
-            || den < i64::MIN as i128
-        {
-            num /= 2;
-            den /= 2;
+    fn mul(mut self, mut rhs: Self) -> Self::Output {
+        let a = self.num.abs().gcd(rhs.den.abs());
+        if a > 1 {
+            self.num /= a;
+            rhs.den /= a;
         }
-        Self::new(num as i64, den as i64)
+        let a = rhs.num.abs().gcd(self.den.abs());
+        if a > 1 {
+            rhs.num /= a;
+            self.den /= a;
+        }
+        let num = self.num as i128 * rhs.num as i128;
+        let den = self.den as i128 * rhs.den as i128;
+        let max = num.abs().max(den.abs());
+        let mut fact = max / i64::MAX as i128 + 1;
+        if fact > 1 && num.abs().min(den.abs()) % (fact + 1) == 0 {
+            fact += 1;
+        }
+        let new_num = num / fact;
+        let new_den = den / fact;
+        if new_den == 0 {
+            if new_num >= 0 {
+                Fraction::MAX
+            } else {
+                Fraction::MIN
+            }
+        } else {
+            Self::new(new_num as i64, new_den as i64)
+        }
     }
 }
 
@@ -122,9 +144,7 @@ impl PartialEq for Fraction {
     }
 }
 
-impl Eq for Fraction {
-    fn assert_receiver_is_total_eq(&self) {}
-}
+impl Eq for Fraction {}
 
 impl PartialOrd for Fraction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -143,26 +163,82 @@ impl PartialOrd for Fraction {
     }
 }
 
-pub const MAX: Fraction = Fraction {
-    num: i64::MAX,
-    den: 1,
-};
-pub const MIN: Fraction = Fraction {
-    num: i64::MIN,
-    den: 1,
-};
-pub const MIN_POSITIVE: Fraction = Fraction {
-    num: 1,
-    den: i64::MAX,
-};
-pub const MAX_NEGATIVE: Fraction = Fraction {
-    num: -1,
-    den: i64::MAX,
-};
-
 impl Fraction {
+    /// highest possible Fraction
+    pub const MAX: Fraction = Fraction {
+        num: i64::MAX,
+        den: 1,
+    };
+    /// lowest possible fraction
+    pub const MIN: Fraction = Fraction {
+        num: i64::MIN,
+        den: 1,
+    };
+    /// lowest possible positive fraction
+    pub const MIN_POSITIVE: Fraction = Fraction {
+        num: 1,
+        den: i64::MAX,
+    };
+    /// highest possible negative fraction
+    pub const MAX_NEGATIVE: Fraction = Fraction {
+        num: -1,
+        den: i64::MAX,
+    };
+    /// approximation of Archimedes' constant (π)
+    pub const PI: Fraction = Fraction {
+        num: 3378027104,
+        den: 1075259423,
+    };
+    /// approximation of sqrt(π)
+    pub const SQRT_PI: Fraction = Fraction {
+        num: 1910320744,
+        den: 1077783065,
+    };
+    /// approximation of sqrt(2)
+    pub const SQRT_2: Fraction = Fraction {
+        num: 1527427483,
+        den: 1080054331,
+    };
+    /// approximation of sqrt(3)
+    pub const SQRT_3: Fraction = Fraction {
+        num: 1866608895,
+        den: 1077687148,
+    };
+    /// approximation of sqrt(5)
+    pub const SQRT_5: Fraction = Fraction {
+        num: 2405109757,
+        den: 1075597782,
+    };
+    /// approximation of Euler's number (e)
+    pub const E: Fraction = Fraction {
+        num: 2927228642,
+        den: 1076867237,
+    };
+    /// approximation of log<sub>2</sub>(10)
+    pub const LOG2_10: Fraction = Fraction {
+        num: 3571843386,
+        den: 1075231999,
+    };
+    /// approximation of ln(2)
+    pub const LN_2: Fraction = Fraction {
+        num: 748264996,
+        den: 1079518199,
+    };
+    /// approximation of ln(10)
+    pub const LN_10: Fraction = Fraction {
+        num: 2479617416,
+        den: 1076884161,
+    };
+
     /// Creates a new [`Fraction`] with the given numerator and denominator.
     /// The created Fraciton will always be in simplified form.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(3, 2), Fraction::new(9,6))
+    /// ```
     pub fn new(numerator: i64, denominator: i64) -> Self {
         if denominator < 0 {
             Self {
@@ -178,12 +254,38 @@ impl Fraction {
         .simplify()
     }
 
+    /// returns the numerator, assuming simplified form.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(3, 2).num(), 3);
+    /// assert_eq!(Fraction::new(8, 6).num(), 4);
+    /// ```
+    pub const fn num(self) -> i64 {
+        self.num
+    }
+
+    /// returns the denominator, assuming simplified form.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(3, 2).den(), 2);
+    /// assert_eq!(Fraction::new(8, 6).den(), 3);
+    /// ```
+    pub const fn den(self) -> i64 {
+        self.den
+    }
+
     /// simplifies the fraction.
-    pub fn simplify(self) -> Self {
+    fn simplify(self) -> Self {
         if self.num == 0 {
             return Self::default();
         }
-        let common_fac = arithmetic::gcd(self.num.abs(), self.den.abs());
+        let common_fac = self.num.abs().gcd(self.den.abs());
         Self {
             num: self.num / common_fac,
             den: self.den / common_fac,
@@ -191,11 +293,35 @@ impl Fraction {
     }
 
     /// returns the multiplicative inverse of the fraction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(2, 3).inverse(), Fraction::new(3, 2))
+    /// ```
     pub fn inverse(self) -> Self {
-        Self::new(self.den, self.num)
+        if self.num < 0 {
+            Self {
+                num: -self.den,
+                den: -self.num,
+            }
+        } else {
+            Self {
+                num: self.den,
+                den: self.num,
+            }
+        }
     }
 
-    /// Computes the absolute value of faction.
+    /// Computes the absolute value of the faction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(-3, 2).abs(), Fraction::new(3, 2))
+    /// ```
     pub fn abs(self) -> Self {
         Self {
             num: self.num.abs(),
@@ -203,26 +329,92 @@ impl Fraction {
         }
     }
 
+    /// Computes `self + rhs`, wrapping around at the
+    /// boundary of the type for both numerator and denominator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// let frac = Fraction::new(i64::MAX, 2);
+    /// assert_eq!(frac.wrapping_add(frac), Fraction::new(-2, 2))
+    /// ```
+    pub fn wrapping_add(self, rhs: Self) -> Self {
+        Self {
+            num: (self.num.wrapping_mul(rhs.den)).wrapping_add(rhs.num.wrapping_mul(self.den)),
+            den: self.den.wrapping_mul(rhs.den),
+        }
+        .simplify()
+    }
+
+    /// Computes `self - rhs`, wrapping around at the
+    /// boundary of the type for both numerator and denominator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// let frac = Fraction::new(i64::MAX, 2);
+    /// assert_eq!(frac.wrapping_sub(-frac), Fraction::new(-2, 2))
+    /// ```
+    pub fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_add(-rhs)
+    }
+
+    /// Computes `self * rhs`, wrapping around at the
+    /// boundary of the type for both numerator and denominator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// let frac = Fraction::new(i64::MAX, 2);
+    /// assert_eq!(frac.wrapping_mul(Fraction::from(3)), Fraction::new(i64::MAX - 2, 2))
+    /// ```
+    pub fn wrapping_mul(self, rhs: Self) -> Self {
+        Self {
+            num: self.num.wrapping_mul(rhs.num),
+            den: self.den.wrapping_mul(rhs.den),
+        }
+        .simplify()
+    }
+
+    /// Computes `self / rhs`, wrapping around at the
+    /// boundary of the type for both numberator and denominator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// let frac = Fraction::new(i64::MAX, 2);
+    /// assert_eq!(frac.wrapping_div(Fraction::new(1, 3)), Fraction::new(i64::MAX - 2, 2))
+    /// ```
+    pub fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs.inverse())
+    }
+
     /// finds the closest fraction to the float with the given denominator.
     ///
     /// # Examples
     ///
     /// ```
-    /// use lmath::fraction::Fraction;
+    /// use elgan_math::Fraction;
     ///
     /// let float = 0.463;
-    /// assert_eq!(Fraction::from_float_with_denominator(float, 1000), Fraction::new(463,1000));
+    /// assert_eq!(Fraction::from_float_with_denominator(float, 20), Fraction::new(9, 20));
+    /// assert_eq!(Fraction::from_float_with_denominator(float, 1000), Fraction::new(463, 1000));
     /// ```
     pub fn from_float_with_denominator(float: f64, den: i64) -> Self {
         Self::new((float * den as f64).round() as i64, den)
     }
 
     /// finds the closest fraction to the given float with denominator less than or equal to the given denominator.
+    /// This can be very slow if `max_denom` is high.
     ///
     /// # Examples
     ///
     /// ```
-    /// use lmath::fraction::Fraction;
+    /// use elgan_math::Fraction;
     ///
     /// let float = 0.3333;
     /// assert_eq!(Fraction::from_float_closest(float, 100), Fraction::new(1, 3));
@@ -230,14 +422,17 @@ impl Fraction {
     pub fn from_float_closest(float: f64, max_denom: i64) -> Self {
         let mut closest = Self::default();
         let mut distance = f64::INFINITY;
-        for i in 1..=max_denom {
+        for i in 1.max(max_denom / 2)..=max_denom {
             let frac = Self::from_float_with_denominator(float, i);
             if (float - f64::from(frac)).abs() < distance {
                 closest = frac;
                 distance = (float - f64::from(frac)).abs();
+                if distance == 0.0 {
+                    break;
+                }
             }
         }
-        closest.simplify()
+        closest
     }
 
     /// finds the closest fraction to the float whose denominator is a power of 2.
@@ -245,7 +440,7 @@ impl Fraction {
     /// # Examples
     ///
     /// ```
-    /// use lmath::fraction::Fraction;
+    /// use elgan_math::Fraction;
     ///
     /// let float = 0.625;
     /// assert_eq!(Fraction::from_float_closest_p2(float), Fraction::new(5, 8));
@@ -259,22 +454,35 @@ impl Fraction {
             if (float - f64::from(frac)).abs() < distance {
                 closest = frac;
                 distance = (float - f64::from(frac)).abs();
+                if distance == 0.0 {
+                    break;
+                }
             }
         }
-        closest.simplify()
+        closest
     }
 
     /// computes the nth power of the fraction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::Fraction;
+    /// assert_eq!(Fraction::new(3, 2).pow(4), Fraction::new(81, 16))
+    /// ```
     pub fn pow(self, n: i64) -> Self {
-        match (n, n < 0, n % 2 == 0) {
-            (_, true, _) => self.inverse().pow(-n),
-            (0, ..) => Self::new(1, 1),
-            (1, ..) => self,
-            (.., true) => {
+        match n {
+            0 => Self::new(1, 1),
+            1 => self,
+            _ if n < 0 => self.inverse().pow(-n),
+            _ if n % 2 == 1 => {
+                let a = self.pow(n / 2);
+                a * a * self
+            }
+            _ => {
                 let a = self.pow(n / 2);
                 a * a
             }
-            (.., false) => self.pow(n - 1) * self,
         }
     }
 }
@@ -288,8 +496,10 @@ mod test {
         let a = Fraction::new(7, 4);
         let b = Fraction::new(12, 5);
         let c = Fraction::new(-9, -24);
+        assert_eq!(c.num(), 3);
+        assert_eq!(c.den(), 8);
         assert_eq!(-a, Fraction::new(-7, 4));
-        assert_eq!(c, Fraction::new(3, 8));
+        assert_eq!(a.inverse(), Fraction::new(4, 7));
         assert_eq!(a + b, Fraction::new(83, 20));
         assert_eq!(a + c, Fraction::new(17, 8));
         assert_eq!(b + c, Fraction::new(111, 40));
@@ -307,7 +517,7 @@ mod test {
             Fraction::new(2, 3)
         );
         assert_eq!(
-            Fraction::from_float_closest(std::f64::consts::PI, 1000),
+            Fraction::from_float_closest(std::f64::consts::PI, 500),
             Fraction::new(355, 113)
         );
     }

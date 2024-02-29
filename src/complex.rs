@@ -1,13 +1,32 @@
+use derive_more::*;
 use std::{
+    cmp::Ordering,
     fmt::Display,
-    ops::{Add, Div, Mul, Neg, Sub},
+    ops::{Div, Mul},
 };
 
 /// a complex number with real and imaginary components
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Neg,
+    Sum,
+    Product,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+)]
 pub struct Complex {
-    pub real: f64,
-    pub im: f64,
+    real: f64,
+    im: f64,
 }
 
 impl From<f64> for Complex {
@@ -20,57 +39,22 @@ impl From<f64> for Complex {
 impl Display for Complex {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::cmp::Ordering::*;
         let Complex { real, im } = *self;
         if real.is_nan() || im.is_nan() {
             return write!(f, "NaN");
         }
         match (real == 0., im == 1., im == -1., im.partial_cmp(&0.)) {
-            (_, true, true, _)                   => unreachable!(),
-            (.., None)                           => write!(f, "NaN"),
-            (true, true, false, _)               => write!(f, "i"),
-            (true, false, true, _)               => write!(f, "-i"),
-            (true, false, false, Some(Less))     => write!(f, "-{}i", -im),
-            (true, false, false, Some(Equal))    => write!(f, "0"),
-            (true, false, false, Some(Greater))  => write!(f, "{}i", im),
-            (false, true, false, _)              => write!(f, "{} + i", real),
-            (false, false, true, _)              => write!(f, "{} - i", real),
-            (false, false, false, Some(Less))    => write!(f, "{} - {}i", real, -im),
-            (false, false, false, Some(Equal))   => write!(f, "{}", real),
-            (false, false, false, Some(Greater)) => write!(f, "{} + {}i", real, im),
+            (_, true, true, _)                             => unreachable!(),
+            (.., None)                                     => write!(f, "NaN"),
+            (true, true, false, _)                         => write!(f, "i"),
+            (true, false, true, _)                         => write!(f, "-i"),
+            (_, false, false, Some(Ordering::Equal))       => write!(f, "{real}"),
+            (true, false, false, Some(_))                  => write!(f, "{im}i" ),
+            (false, true, false, _)                        => write!(f, "{real} + i"),
+            (false, false, true, _)                        => write!(f, "{real} - i"),
+            (false, false, false, Some(Ordering::Less))    => write!(f, "{real} - {}i", -im),
+            (false, false, false, Some(Ordering::Greater)) => write!(f, "{real} + {im}i"),
         }
-    }
-}
-
-impl Neg for Complex {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self::new(-self.real, -self.im)
-    }
-}
-
-impl Add for Complex {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.real + rhs.real, self.im + rhs.im)
-    }
-}
-
-impl Sub for Complex {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        self + -rhs
-    }
-}
-
-impl Mul<f64> for Complex {
-    type Output = Self;
-
-    fn mul(self, rhs: f64) -> Self::Output {
-        Self::new(self.real * rhs, self.im * rhs)
     }
 }
 
@@ -79,14 +63,6 @@ impl Mul<Complex> for f64 {
 
     fn mul(self, rhs: Complex) -> Self::Output {
         Complex::new(rhs.real * self, rhs.im * self)
-    }
-}
-
-impl Div<f64> for Complex {
-    type Output = Self;
-
-    fn div(self, rhs: f64) -> Self::Output {
-        Self::new(self.real / rhs, self.im / rhs)
     }
 }
 
@@ -113,18 +89,28 @@ impl Mul for Complex {
 impl Div for Complex {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self::Output {
-        self * rhs.inverse()
+        self.mul(rhs.inverse())
     }
 }
 
-pub const I: Complex = Complex { real: 0., im: 1. };
-
 impl Complex {
+    /// the imaginary unit
+    pub const I: Complex = Complex { real: 0., im: 1. };
+
     /// Creates a new [`Complex`] with the given real and imaginary components.
-    pub fn new(real: f64, im: f64) -> Self {
+    pub const fn new(real: f64, im: f64) -> Self {
         Self { real, im }
+    }
+
+    /// returns the real component
+    pub const fn real(self) -> f64 {
+        self.real
+    }
+
+    /// returns the imaginary component
+    pub const fn im(self) -> f64 {
+        self.im
     }
 
     /// returns the multiplicative inverse. `a.inverse()` is equivalent to `1.0 / a`.
@@ -139,16 +125,15 @@ impl Complex {
 
     /// returns the absolute value of the complex number.
     pub fn abs(self) -> f64 {
-        self.abs_squared().sqrt()
+        self.real.hypot(self.im)
     }
 
-    /// returns the angle between the complex number and the positive real line.
-    pub fn angle(self) -> f64 {
+    /// returns the angle between the complex number and the positive real line, in radians.
+    pub fn arg(self) -> f64 {
         self.im.atan2(self.real)
     }
 
     /// computes the square of the absolute value of the complex number.
-    /// This is faster than computing the absolute value and then squaring it.
     pub fn abs_squared(self) -> f64 {
         self.real * self.real + self.im * self.im
     }
@@ -163,14 +148,31 @@ impl Complex {
         Self::new(angle.cos() * length, angle.sin() * length)
     }
 
+    /// computes the complex number raised to an integer power.
+    pub fn powi(self, n: i64) -> Self {
+        match n {
+            0 => Self::new(1., 0.),
+            1 => self,
+            _ if n < 0 => self.inverse().powi(-n),
+            _ if n % 2 == 1 => {
+                let a = self.powi(n / 2);
+                a * a * self
+            }
+            _ => {
+                let a = self.powi(n / 2);
+                a * a
+            }
+        }
+    }
+
     /// computes the complex number raised to the power.
     pub fn powf(self, rhs: f64) -> Self {
-        Self::from_polar(self.abs().powf(rhs), self.angle() * rhs)
+        Self::from_polar(self.abs().powf(rhs), self.arg() * rhs)
     }
 
     /// returns the square root of a complex number.
     pub fn sqrt(self) -> Self {
-        Self::from_polar(self.abs().sqrt(), self.angle() / 2.)
+        Self::from_polar(self.abs().sqrt(), self.arg() / 2.)
     }
 
     /// returns e raised to the power of the complex number.
@@ -181,7 +183,7 @@ impl Complex {
     /// returns the natural log of the complex number.
     /// Since the natural log is not unique, returns the complex number a+bi with -pi<b<=pi.
     pub fn ln(self) -> Self {
-        Self::new(self.abs().ln(), self.angle())
+        Self::new(self.abs().ln(), self.arg())
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
@@ -194,13 +196,49 @@ impl Complex {
         (rhs * self.ln()).exp()
     }
 
+    /// computes the sine of a number
+    pub fn sin(self) -> Self {
+        Self::new(
+            self.real.sin() + self.im.cosh(),
+            self.real.cos() + self.im.sinh(),
+        )
+    }
+
+    /// computes the cosine of a number
+    pub fn cos(self) -> Self {
+        Self::new(
+            self.real.cos() + self.im.cosh(),
+            -self.real.sin() - self.im.sinh(),
+        )
+    }
+
+    /// computes the tangent of a number
+    pub fn tan(self) -> Self {
+        self.sin() / self.cos()
+    }
+
+    /// computes the secant of a number
+    pub fn sec(self) -> Self {
+        1. / self.cos()
+    }
+
+    /// computes the cosecant of a number
+    pub fn csc(self) -> Self {
+        1. / self.sin()
+    }
+
+    /// computes the cotangent of a number
+    pub fn cot(self) -> Self {
+        self.cos() / self.sin()
+    }
+
     /// Returns `true` if this value is NaN.
     pub fn is_nan(self) -> bool {
         self.real.is_nan() || self.im.is_nan()
     }
 
     /// returns true if the two numbers are equivalent within a floating-point rounding error. useful for tests.
-    pub fn is_close_enough(self, rhs: Self) -> bool {
-        (self - rhs).abs() < f64::EPSILON
+    pub fn close_to(self, rhs: Self) -> bool {
+        (self - rhs).abs() <= (self.abs().max(rhs.abs()) * f64::EPSILON * 2.0).max(f64::EPSILON)
     }
 }
