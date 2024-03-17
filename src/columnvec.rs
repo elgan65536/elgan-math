@@ -357,6 +357,23 @@ impl<const LENGTH: usize> ColumnVec<LENGTH> {
         result
     }
 
+    /// reflects the vector about a plane normal to the normal vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use elgan_math::{ColumnVec};
+    /// use elgan_math::FloatArithmetic;
+    /// let vec1 = ColumnVec::new([1.0, 2.0]);
+    /// let normal = ColumnVec::new([-1., 1.]);
+    /// assert!(vec1.reflect_about(normal).close_to(ColumnVec::new([2.0, 1.0])));
+    /// ```
+    pub fn reflect_about(self, normal: Self) -> Self {
+        let d = self;
+        let n = normal.normalized();
+        d - 2. * (d * n) * n
+    }
+
     /// creates a new column vector where each element is the funciton applied to the original element.
     ///
     /// # Examples
