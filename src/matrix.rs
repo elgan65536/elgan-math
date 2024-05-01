@@ -521,4 +521,9 @@ impl<const HEIGHT: usize, const WIDTH: usize> Matrix<HEIGHT, WIDTH> {
         }
         result
     }
+
+    /// returns the matrix as a 2D array
+    pub fn to_array(self) -> [[f64; WIDTH]; HEIGHT] {
+        self.0
+    }
 }
