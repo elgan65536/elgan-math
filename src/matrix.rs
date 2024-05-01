@@ -238,6 +238,7 @@ impl Matrix<2, 2> {
 
 impl Matrix<3, 3> {
     /// constructs a random, uniformly distributed 3D rotation matrix.
+    #[cfg(feature = "random")]
     pub fn random_rotation() -> Self {
         let a = ColumnVec::<3>::random_unit();
         let b = ColumnVec::<3>::random_unit();

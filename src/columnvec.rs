@@ -1,6 +1,7 @@
 use derive_more::*;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+#[cfg(feature = "random")]
 use rand::Rng;
 
 use crate::{complex::Complex, matrix::Matrix, FloatArithmetic};
@@ -273,23 +274,27 @@ impl<const LENGTH: usize> ColumnVec<LENGTH> {
     }
 
     /// constructs a vector whose components are all uniformly selected from the specified range.
+    #[cfg(feature = "random")]
     pub fn random_box(min: f64, max: f64) -> Self {
         Self::default().map(|_| rand::thread_rng().gen_range(min..max))
     }
 
     /// generates a random variable following a normal distribution using Box-Muller Transform; for use in random_unit
+    #[cfg(feature = "random")]
     fn random_normal() -> f64 {
         (-2. * rand::random::<f64>().ln()).sqrt()
             * (std::f64::consts::TAU * rand::random::<f64>()).cos()
     }
 
     /// constructs a vector with random direction and length of 1.
+    #[cfg(feature = "random")]
     pub fn random_unit() -> Self {
         Self::default().map(|_| Self::random_normal()).normalized()
     }
 
     /// constructs a vector with random direction and length of less than or equal to 1.
     /// Uniformly selects from all possible points.
+    #[cfg(feature = "random")]
     pub fn random_inside_sphere() -> Self {
         Self::random_unit() * rand::random::<f64>().powf(1. / LENGTH as f64)
     }
@@ -297,6 +302,7 @@ impl<const LENGTH: usize> ColumnVec<LENGTH> {
     /// constructs a vector with random direction and length of less than or equal to 1
     /// that forms an acute or right angle with the specified direction.
     /// Uniformly selects from all possible points.
+    #[cfg(feature = "random")]
     pub fn random_in_hemisphere(vec: ColumnVec<LENGTH>) -> Self {
         let result = Self::random_inside_sphere();
         if result * vec < 0. {
